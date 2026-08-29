@@ -22,6 +22,54 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const description = (formData.get("description") as string)?.trim() || "";
   const price = (formData.get("price") as string)?.trim();
   const status = (formData.get("status") as string) || "ACTIVE";
+  const deleteProductId = (formData.get("deleteProductId") as string)?.trim() || "";
+
+  if (deleteProductId) {
+    try {
+      const response = await admin.graphql(
+        `#graphql
+          mutation deleteProduct($input: ProductDeleteInput!) {
+            productDelete(input: $input) {
+              deletedProductId
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `,
+        {
+          variables: {
+            input: {
+              id: deleteProductId,
+            },
+          },
+        },
+      );
+
+      const responseJson = await response.json();
+      const userErrors = responseJson.data?.productDelete?.userErrors;
+
+      if (userErrors && userErrors.length > 0) {
+        return {
+          success: false,
+          error: userErrors.map((e: { message: string }) => e.message).join(", "),
+        };
+      }
+
+      return {
+        success: true,
+        message: `Product "${deleteProductId}" deleted successfully!`,
+      };
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "An unexpected error occurred";
+      return {
+        success: false,
+        error: message,
+      };
+    }
+  }
 
   if (!title) {
     return {
@@ -129,6 +177,7 @@ export default function CRUDPage() {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("19.99");
   const [status, setStatus] = useState("ACTIVE");
+  const [deleteProductId, setDeleteProductId] = useState("");
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -138,6 +187,7 @@ export default function CRUDPage() {
       setTitle("");
       setDescription("");
       setPrice("19.99");
+      setDeleteProductId("");
     } else if (fetcher.data?.error) {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
@@ -153,6 +203,17 @@ export default function CRUDPage() {
         status,
       },
       { method: "POST" },
+    );
+  };
+
+  const handleDeleteProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log("deleteProductId", deleteProductId);
+    fetcher.submit(
+      {
+        deleteProductId,
+      },
+      { method: "DELETE" },
     );
   };
 
@@ -258,6 +319,28 @@ export default function CRUDPage() {
             </s-box>
           </div>
         )}
+      </s-section>
+
+      <s-section>
+        <form onSubmit={handleDeleteProduct}>
+          <s-stack direction="block" gap="base">
+            <s-text-field
+              label="Product ID"
+              name="deleteProductId"
+              value={deleteProductId}
+              placeholder="gid://shopify/Product/123456789"
+              onChange={(e) => setDeleteProductId(e.currentTarget.value)}
+            />
+            <s-button
+              type="submit"
+              variant="secondary"
+              disabled={!deleteProductId}
+              {...(isSubmitting ? { loading: true } : {})}
+            >
+              {isSubmitting ? "Deleting..." : "Delete Product"}
+            </s-button>
+          </s-stack>
+        </form>
       </s-section>
     </s-page>
   );
